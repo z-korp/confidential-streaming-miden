@@ -1,0 +1,30 @@
+# Rust
+target/
+Cargo.lock.local
+*.swp
+
+# Miden client local state
+store.sqlite3
+store.sqlite3-journal
+store.sqlite3-wal
+store.sqlite3-shm
+keystore/
+keystore-*/
+
+# Stream metadata (off-chain handoff)
+streams/*.json
+!streams/.gitkeep
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+.env
+.env.local
+.env.*.local
+*.tsbuildinfo
+
+# Editor / OS
+.DS_Store
+.vscode/
+.idea/

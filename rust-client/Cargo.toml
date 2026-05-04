@@ -1,0 +1,41 @@
+[package]
+name = "confidential-streaming-rust-client"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+miden-client = { workspace = true }
+miden-client-sqlite-store = { workspace = true }
+miden-protocol = { workspace = true }
+rand = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+clap = { workspace = true }
+anyhow = { workspace = true }
+hex = { workspace = true }
+
+[[bin]]
+name = "setup"
+path = "src/bin/setup.rs"
+
+[[bin]]
+name = "open_stream"
+path = "src/bin/open_stream.rs"
+
+[[bin]]
+name = "claim"
+path = "src/bin/claim.rs"
+
+[[bin]]
+name = "cancel"
+path = "src/bin/cancel.rs"
+
+[[bin]]
+name = "status"
+path = "src/bin/status.rs"
+
+[lib]
+path = "src/lib.rs"
