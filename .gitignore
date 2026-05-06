@@ -10,6 +10,7 @@ store.sqlite3-wal
 store.sqlite3-shm
 keystore/
 keystore-*/
+rust-client/data/
 
 # Stream metadata (off-chain handoff)
 streams/*.json

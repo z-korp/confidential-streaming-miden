@@ -37,5 +37,9 @@ path = "src/bin/cancel.rs"
 name = "status"
 path = "src/bin/status.rs"
 
+[[bin]]
+name = "e2e"
+path = "src/bin/e2e.rs"
+
 [lib]
 path = "src/lib.rs"

@@ -1,7 +1,7 @@
-use.miden::protocol::active_note
-use.miden::protocol::active_account
-use.miden::protocol::tx
-use.miden::standards::wallets::basic->wallet
+use miden::protocol::active_note
+use miden::protocol::active_account
+use miden::protocol::tx
+use miden::standards::wallets::basic->basic_wallet
 
 # Memory layout produced by `active_note::get_storage` with dest_ptr=0:
 #   word 0  @ mem[0..3]   = [recipient_id_suffix, recipient_id_prefix, 0, 0]
@@ -20,22 +20,22 @@ const IS_UNLOCKED_PTR=12
 
 const ERR_NOT_ELIGIBLE="stream tranche: caller is not (recipient and unlocked) nor (sender and still locked)"
 
-#! Inputs (note_args):  [_, _, _, _]   (unused)
-#! Outputs:             []
-begin
-    # Drop note_args (we don't use them)
-    dropw
-
+#! Inputs:  []
+#! Outputs: []
+@note_script
+pub proc main
     # Materialise full note storage into memory at addr 0..11
     push.0 exec.active_note::get_storage drop drop
     # => []
 
     # ---- Compute is_unlocked = (current_block_number >= unlock_block) ----
-    push.UNLOCK_PTR mem_load              # => [unlock_block]
+    # u32gte semantics: pops [a, b] (a on top) and pushes 1 iff b >= a.
+    # We want block_num >= unlock_block, so block_num must be the *lower* element.
+    exec.tx::get_block_number             # => [block_num]
     u32assert
-    exec.tx::get_block_number             # => [block_num, unlock_block]
+    push.UNLOCK_PTR mem_load              # => [unlock_block, block_num]
     u32assert
-    u32gte                                # => [is_unlocked]   (1 if block_num >= unlock_block)
+    u32gte                                # => [is_unlocked]   (1 iff block_num >= unlock_block)
     push.IS_UNLOCKED_PTR mem_store        # mem[12] = is_unlocked, stack = []
 
     # ---- Compare executing account id against recipient ----
@@ -51,7 +51,7 @@ begin
     if.true
         # Recipient claim: drop the duplicated acct id, transfer assets to recipient's vault
         drop drop
-        exec.wallet::add_assets_to_account
+        exec.basic_wallet::add_assets_to_account
     else
         # Try sender reclaim path
         # Stack: [acct_suffix, acct_prefix]
@@ -62,7 +62,7 @@ begin
         push.IS_UNLOCKED_PTR mem_load not and  # AND !is_unlocked    => [is_sender_reclaim_path]
 
         if.true
-            exec.wallet::add_assets_to_account
+            exec.basic_wallet::add_assets_to_account
         else
             push.0 assert.err=ERR_NOT_ELIGIBLE
         end

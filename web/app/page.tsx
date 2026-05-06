@@ -5,19 +5,23 @@ import {
   createStreamFaucet,
   createWallet,
   getBalance,
+  getProver,
   mintTo,
-  sendTranche,
+  sendTranches,
   syncBlock,
   consumeNoteIds,
 } from "@/lib/miden";
 import {
   AccountsState,
+  ProverMode,
   Stream,
   Tranche,
   genStreamId,
   loadAccounts,
+  loadProverMode,
   loadStreams,
   saveAccounts,
+  saveProverMode,
   upsertStream,
 } from "@/lib/storage";
 
@@ -29,6 +33,7 @@ export default function Home() {
   const [bobBal, setBobBal] = useState<bigint>(BigInt(0));
   const [busy, setBusy] = useState<string | null>(null);
   const [log, setLog] = useState<string[]>([]);
+  const [proverMode, setProverModeState] = useState<ProverMode>("local");
 
   // form state
   const [total, setTotal] = useState(1000);
@@ -38,9 +43,33 @@ export default function Home() {
   const append = (msg: string) =>
     setLog((l) => [`${new Date().toLocaleTimeString()}  ${msg}`, ...l].slice(0, 50));
 
+  // Time `fn`, return its result. Logs the wall-clock duration with the active
+  // prover mode so it's easy to compare runs side-by-side in the activity log.
+  async function timed<T>(label: string, fn: () => Promise<T>): Promise<T> {
+    const t0 = performance.now();
+    append(`${label} [${proverMode}] starting…`);
+    try {
+      const r = await fn();
+      const dt = ((performance.now() - t0) / 1000).toFixed(1);
+      append(`${label} [${proverMode}] done in ${dt}s`);
+      return r;
+    } catch (e) {
+      const dt = ((performance.now() - t0) / 1000).toFixed(1);
+      append(`${label} [${proverMode}] failed after ${dt}s: ${(e as Error).message}`);
+      throw e;
+    }
+  }
+
+  function changeProverMode(m: ProverMode) {
+    setProverModeState(m);
+    saveProverMode(m);
+    append(`prover switched → ${m}`);
+  }
+
   useEffect(() => {
     setAccounts(loadAccounts());
     setStreams(loadStreams());
+    setProverModeState(loadProverMode());
   }, []);
 
   async function refresh() {
@@ -64,6 +93,7 @@ export default function Home() {
   async function onSetup() {
     setBusy("setup");
     try {
+      const prover = await getProver(proverMode);
       append("creating Alice…");
       const alice = await createWallet();
       append(`Alice: ${alice.id().toString()}`);
@@ -82,8 +112,9 @@ export default function Home() {
       saveAccounts(next);
       setAccounts(next);
 
-      append("minting 100 000 STREAM to Alice…");
-      await mintTo(next.faucet!, next.alice!, BigInt(100_000));
+      await timed("mint 100k STREAM → Alice", () =>
+        mintTo(next.faucet!, next.alice!, BigInt(100_000), prover),
+      );
       append("setup complete");
       await refresh();
     } catch (e) {
@@ -101,27 +132,42 @@ export default function Home() {
     if (total <= 0 || tranches <= 0 || duration <= 0) return;
     setBusy("open");
     try {
+      const prover = await getProver(proverMode);
       const now = await syncBlock();
       const base = Math.floor(total / tranches);
       const rem = total - base * tranches;
       const step = Math.max(1, Math.ceil(duration / tranches));
       const id = genStreamId();
-      const trancheList: Tranche[] = [];
-      append(`opening stream ${id} (${tranches} tranches × ${base})`);
+      append(`opening stream ${id} (${tranches} tranches × ${base}, single tx)`);
 
-      for (let i = 0; i < tranches; i++) {
-        const amount = i + 1 === tranches ? base + rem : base;
-        const unlockBlock = now + (i + 1) * step;
-        const noteId = await sendTranche({
-          senderId: accounts.alice,
-          recipientId: accounts.bob,
-          faucetId: accounts.faucet,
-          amount: BigInt(amount),
-          timelockUntil: unlockBlock,
-          reclaimAfter: 0,
-        });
-        trancheList.push({ index: i, amount, unlockBlock, status: "pending", noteId });
-        append(`  tranche #${i} unlock@${unlockBlock} note=${noteId.slice(0, 10)}…`);
+      const specs = Array.from({ length: tranches }, (_, i) => ({
+        amount: i + 1 === tranches ? base + rem : base,
+        unlockBlock: now + (i + 1) * step,
+      }));
+
+      const noteIds = await timed(`open ${tranches}-tranche stream`, () =>
+        sendTranches({
+          senderId: accounts.alice!,
+          recipientId: accounts.bob!,
+          faucetId: accounts.faucet!,
+          tranches: specs.map((s) => ({
+            amount: BigInt(s.amount),
+            timelockUntil: s.unlockBlock,
+            reclaimAfter: 0,
+          })),
+          prover,
+        }),
+      );
+
+      const trancheList: Tranche[] = specs.map((s, i) => ({
+        index: i,
+        amount: s.amount,
+        unlockBlock: s.unlockBlock,
+        status: "pending",
+        noteId: noteIds[i],
+      }));
+      for (const t of trancheList) {
+        append(`  tranche #${t.index} unlock@${t.unlockBlock} note=${t.noteId!.slice(0, 10)}…`);
       }
 
       const stream: Stream = {
@@ -147,6 +193,7 @@ export default function Home() {
     if (!s) return;
     setBusy(`claim:${streamId}`);
     try {
+      const prover = await getProver(proverMode);
       const now = await syncBlock();
       const eligible = s.tranches.filter(
         (t) => t.status === "pending" && t.unlockBlock <= now && t.noteId,
@@ -155,10 +202,12 @@ export default function Home() {
         append(`stream ${streamId}: no unlocked tranches yet`);
         return;
       }
-      append(`claiming ${eligible.length} tranche(s) from ${streamId}…`);
-      const txId = await consumeNoteIds(
-        accounts.bob,
-        eligible.map((t) => t.noteId!),
+      const txId = await timed(`claim ${eligible.length} tranche(s)`, () =>
+        consumeNoteIds(
+          accounts.bob!,
+          eligible.map((t) => t.noteId!),
+          prover,
+        ),
       );
       if (txId) append(`  tx ${txId.toHex()}`);
       const next = { ...s, tranches: s.tranches.map((t) => (eligible.includes(t) ? { ...t, status: "claimed" as const } : t)) };
@@ -177,16 +226,19 @@ export default function Home() {
     if (!s) return;
     setBusy(`cancel:${streamId}`);
     try {
+      const prover = await getProver(proverMode);
       // P2IDE with reclaimAfter=0 lets sender reclaim any pending note at any block.
       const reclaimable = s.tranches.filter((t) => t.status === "pending" && t.noteId);
       if (reclaimable.length === 0) {
         append(`stream ${streamId}: nothing to reclaim`);
         return;
       }
-      append(`reclaiming ${reclaimable.length} tranche(s) from ${streamId}…`);
-      const txId = await consumeNoteIds(
-        accounts.alice,
-        reclaimable.map((t) => t.noteId!),
+      const txId = await timed(`reclaim ${reclaimable.length} tranche(s)`, () =>
+        consumeNoteIds(
+          accounts.alice!,
+          reclaimable.map((t) => t.noteId!),
+          prover,
+        ),
       );
       if (txId) append(`  tx ${txId.toHex()}`);
       const next = { ...s, tranches: s.tranches.map((t) => (reclaimable.includes(t) ? { ...t, status: "cancelled" as const } : t)) };
@@ -214,6 +266,23 @@ export default function Home() {
         <Card title="Network">
           <Row k="block (testnet)" v={block ?? "…"} />
           <Row k="rpc" v="rpc.testnet.miden.io" />
+          <div className="mt-3 pt-3 border-t border-[var(--border)]">
+            <div className="text-sm text-[var(--muted)] mb-2">prover</div>
+            <div className="flex gap-2 text-sm">
+              <ProverChoice
+                active={proverMode === "local"}
+                onClick={() => changeProverMode("local")}
+                label="local"
+                hint="proof in browser · private witness"
+              />
+              <ProverChoice
+                active={proverMode === "testnet"}
+                onClick={() => changeProverMode("testnet")}
+                label="remote"
+                hint="proof on Miden server · faster, witness leaves browser"
+              />
+            </div>
+          </div>
         </Card>
         <Card title="Accounts">
           <Row k="alice" v={accounts.alice ? short(accounts.alice) : "—"} />
@@ -389,4 +458,31 @@ function trancheColor(t: Tranche, block: number): string {
 
 function short(s: string): string {
   return s.length > 16 ? `${s.slice(0, 8)}…${s.slice(-6)}` : s;
+}
+
+function ProverChoice({
+  active,
+  onClick,
+  label,
+  hint,
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+  hint: string;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      title={hint}
+      className={`flex-1 px-2 py-1.5 rounded border text-left ${
+        active
+          ? "border-[var(--accent)] bg-[var(--accent)]/10"
+          : "border-[var(--border)] hover:border-[var(--muted)]"
+      }`}
+    >
+      <div className="font-medium">{label}</div>
+      <div className="text-[10px] text-[var(--muted)] leading-tight">{hint}</div>
+    </button>
+  );
 }

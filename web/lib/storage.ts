@@ -72,3 +72,17 @@ export function genStreamId(): string {
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
 }
+
+export type ProverMode = "local" | "testnet";
+
+const PROVER_KEY = "csm.prover.v1";
+
+export function loadProverMode(): ProverMode {
+  if (typeof window === "undefined") return "local";
+  const raw = localStorage.getItem(PROVER_KEY);
+  return raw === "testnet" ? "testnet" : "local";
+}
+
+export function saveProverMode(mode: ProverMode) {
+  localStorage.setItem(PROVER_KEY, mode);
+}

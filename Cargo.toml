@@ -19,3 +19,10 @@ tokio = { version = "1.48", features = ["rt-multi-thread", "net", "macros", "fs"
 clap = { version = "4", features = ["derive"] }
 anyhow = "1"
 hex = "0.4"
+
+# miden-client 0.14.x has a debug_assertion that fires during state sync
+# (https://github.com/0xMiden/miden-client/issues/2126). Compile it with
+# opt-level=3 and debug-assertions off so `cargo run` works without --release.
+[profile.dev.package.miden-client]
+opt-level = 3
+debug-assertions = false
