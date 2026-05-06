@@ -33,6 +33,7 @@ import { AccountsCard } from "@/components/accounts-card";
 import { CreateStreamForm } from "@/components/create-stream-form";
 import { StreamCard } from "@/components/stream-card";
 import { ActivityLog } from "@/components/activity-log";
+import { StreamDetailsPanel } from "@/components/stream-details-panel";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export default function Home() {
@@ -48,6 +49,7 @@ export default function Home() {
   const [total, setTotal] = useState(1000);
   const [tranches, setTranches] = useState(5);
   const [duration, setDuration] = useState(20);
+  const [selectedStreamId, setSelectedStreamId] = useState<string | null>(null);
 
   const append = (msg: string) =>
     setLog((l) =>
@@ -385,6 +387,7 @@ export default function Home() {
                       busy={busy}
                       onClaim={() => onClaim(s.id)}
                       onCancel={() => onCancel(s.id)}
+                      onOpen={() => setSelectedStreamId(s.id)}
                     />
                   ))}
                 </div>
@@ -397,6 +400,22 @@ export default function Home() {
           <ActivityLog log={log} onClear={() => setLog([])} />
         </div>
       </section>
+
+      {selectedStreamId &&
+        (() => {
+          const s = streams.find((x) => x.id === selectedStreamId);
+          if (!s) return null;
+          return (
+            <StreamDetailsPanel
+              stream={s}
+              block={block ?? 0}
+              busy={busy}
+              onClaim={() => onClaim(s.id)}
+              onCancel={() => onCancel(s.id)}
+              onBack={() => setSelectedStreamId(null)}
+            />
+          );
+        })()}
 
       <footer className="border-t border-border/60 py-8">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 text-xs text-muted-foreground sm:px-6">

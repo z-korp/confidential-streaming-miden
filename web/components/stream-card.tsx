@@ -1,9 +1,10 @@
 "use client";
 
-import { ArrowDownToLine, Ban, Clock, Coins, Hash } from "lucide-react";
+import { ArrowDownToLine, Ban, ChevronRight, Coins, Hash, Timer } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { blocksToHuman } from "@/lib/time";
 import type { Stream, TrancheStatus } from "@/lib/storage";
 import { StreamProgress } from "./stream-progress";
 
@@ -45,12 +46,14 @@ export function StreamCard({
   busy,
   onClaim,
   onCancel,
+  onOpen,
 }: {
   stream: Stream;
   block: number;
   busy: string | null;
   onClaim: () => void;
   onCancel: () => void;
+  onOpen?: () => void;
 }) {
   const status = deriveStatus(stream);
   const claimedAmount = stream.tranches
@@ -77,8 +80,26 @@ export function StreamCard({
     busy !== null || pendingUnlocked === 0 || status === "cancelled";
   const cancelDisabled = busy !== null || remainingPending === 0;
 
+  const nextUnlockEta =
+    nextUnlock != null ? Math.max(0, nextUnlock - block) : null;
+
   return (
-    <div className="rounded-xl border border-border bg-card p-4 transition-colors hover:bg-card/70">
+    <div
+      role={onOpen ? "button" : undefined}
+      tabIndex={onOpen ? 0 : undefined}
+      onClick={onOpen}
+      onKeyDown={(e) => {
+        if (!onOpen) return;
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onOpen();
+        }
+      }}
+      className={cn(
+        "group rounded-xl border border-border bg-card p-4 transition-colors",
+        onOpen && "cursor-pointer hover:border-foreground/20 hover:bg-card/70",
+      )}
+    >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
           <span className="inline-flex items-center gap-1.5 font-mono text-xs text-muted-foreground">
@@ -97,10 +118,20 @@ export function StreamCard({
         </div>
 
         <div className="flex items-center gap-3 text-xs text-muted-foreground">
-          <span className="inline-flex items-center gap-1">
-            <Clock className="h-3 w-3" />
-            block {block.toLocaleString()}
-          </span>
+          {nextUnlockEta != null && nextUnlockEta > 0 ? (
+            <span className="inline-flex items-center gap-1">
+              <Timer className="h-3 w-3" />
+              next unlock ~{blocksToHuman(nextUnlockEta)}
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1">
+              <Timer className="h-3 w-3" />
+              block {block.toLocaleString()}
+            </span>
+          )}
+          {onOpen && (
+            <ChevronRight className="h-3.5 w-3.5 opacity-0 transition-opacity group-hover:opacity-60" />
+          )}
         </div>
       </div>
 
@@ -123,8 +154,10 @@ export function StreamCard({
           unit="STREAM"
           tone="muted"
           subtitle={
-            remainingPending > 0 && nextUnlock != null
-              ? `next unlock @ block ${nextUnlock.toLocaleString()}`
+            remainingPending > 0 && nextUnlockEta != null
+              ? nextUnlockEta > 0
+                ? `next unlock in ~${blocksToHuman(nextUnlockEta)}`
+                : "next unlock ready"
               : undefined
           }
         />
@@ -153,7 +186,10 @@ export function StreamCard({
           <Button
             variant="success"
             size="sm"
-            onClick={onClaim}
+            onClick={(e) => {
+              e.stopPropagation();
+              onClaim();
+            }}
             disabled={claimDisabled}
             title="Bob consumes any unlocked tranche notes"
           >
@@ -165,7 +201,10 @@ export function StreamCard({
           <Button
             variant="destructive"
             size="sm"
-            onClick={onCancel}
+            onClick={(e) => {
+              e.stopPropagation();
+              onCancel();
+            }}
             disabled={cancelDisabled}
             title="Alice reclaims all still-pending tranche notes"
           >

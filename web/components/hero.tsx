@@ -1,10 +1,22 @@
+"use client";
+
+import dynamic from "next/dynamic";
 import { ArrowDown, EyeOff, Layers, Zap } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+
+const StoneHero = dynamic(() => import("./stone-hero"), { ssr: false });
 
 export function Hero() {
   return (
     <section className="relative isolate overflow-hidden border-b border-border">
       <div aria-hidden className="absolute inset-0 hero-grid" />
+      <div aria-hidden className="absolute inset-0 opacity-60">
+        <StoneHero />
+      </div>
+      <div
+        aria-hidden
+        className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-b from-transparent to-background"
+      />
 
       <div className="relative mx-auto flex max-w-6xl flex-col items-center px-4 pt-24 pb-20 text-center sm:px-6 sm:pt-32 sm:pb-28">
         <Badge

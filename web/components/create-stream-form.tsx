@@ -4,6 +4,7 @@ import { ArrowRight, Coins, Layers, Timer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { blocksToHuman } from "@/lib/time";
 
 export function CreateStreamForm({
   total,
@@ -61,7 +62,7 @@ export function CreateStreamForm({
           <Field
             icon={<Timer className="h-3.5 w-3.5" />}
             label="Duration"
-            hint="blocks"
+            hint={`blocks · ~${blocksToHuman(duration)}`}
             value={duration}
             onChange={onDuration}
           />
@@ -71,8 +72,9 @@ export function CreateStreamForm({
           ≈{" "}
           <span className="font-mono text-foreground">{perTranche}</span>{" "}
           STREAM per tranche, unlocking every{" "}
-          <span className="font-mono text-foreground">{stepBlocks}</span>{" "}
-          block(s).
+          <span className="font-mono text-foreground">~{blocksToHuman(stepBlocks)}</span>{" "}
+          ({stepBlocks} block{stepBlocks === 1 ? "" : "s"}). Total duration{" "}
+          <span className="font-mono text-foreground">~{blocksToHuman(duration)}</span>.
         </div>
 
         <Button
