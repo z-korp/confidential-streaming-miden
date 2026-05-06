@@ -18,6 +18,7 @@ import {
 import type { ProverMode } from "./storage";
 
 const RPC_URL = "https://rpc.testnet.miden.io";
+const REMOTE_PROVER_URL = "https://tx-prover.testnet.miden.io";
 
 let _clientPromise: Promise<MidenClient> | null = null;
 
@@ -45,7 +46,7 @@ export async function getProver(mode: ProverMode): Promise<TransactionProver> {
   if (!p) {
     p = mode === "local"
       ? TransactionProver.newLocalProver()
-      : TransactionProver.newRemoteProver("testnet");
+      : TransactionProver.newRemoteProver(REMOTE_PROVER_URL);
     _provers[mode] = p;
   }
   return p;
